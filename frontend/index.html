@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WebWatch — Site Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#03070f;--bg2:#080f1e;--surface:#0c1628;--card:#0f1d35;
+  --border:rgba(56,189,248,0.15);--border2:rgba(56,189,248,0.08);
+  --cyan:#38bdf8;--cyan-dim:rgba(56,189,248,0.1);
+  --violet:#a78bfa;--green:#34d399;--amber:#fbbf24;--red:#f87171;
+  --text:#e2e8f0;--muted:#64748b;--muted2:#334155;
+  --font:'Outfit',sans-serif;--mono:'JetBrains Mono',monospace;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:14px;-webkit-font-smoothing:antialiased}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--muted2);border-radius:3px}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:radial-gradient(ellipse 60% 40% at 10% 10%,rgba(56,189,248,0.05) 0%,transparent 60%),
+  radial-gradient(ellipse 50% 30% at 90% 80%,rgba(167,139,250,0.05) 0%,transparent 60%);}
+body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:linear-gradient(rgba(56,189,248,0.03) 1px,transparent 1px),
+  linear-gradient(90deg,rgba(56,189,248,0.03) 1px,transparent 1px);background-size:60px 60px;}
+
+/* ── Layout ── */
+.shell{position:relative;z-index:1;display:flex;flex-direction:column;min-height:100vh}
+
+/* ── Topbar ── */
+.topbar{display:flex;align-items:center;gap:20px;padding:0 28px;height:62px;
+  background:rgba(8,15,30,0.9);backdrop-filter:blur(16px);
+  border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100;}
+.logo{font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:2px;color:var(--cyan);
+  text-decoration:none;display:flex;align-items:center;gap:10px;white-space:nowrap}
+.logo-pulse{width:8px;height:8px;border-radius:50%;background:var(--cyan);
+  animation:pulse-ring 2s infinite;flex-shrink:0}
+@keyframes pulse-ring{0%,100%{box-shadow:0 0 0 0 rgba(56,189,248,0.5)}50%{box-shadow:0 0 0 6px rgba(56,189,248,0)}}
+.nav{display:flex;gap:4px;margin-left:24px;flex:1}
+.nav-btn{background:none;border:none;cursor:pointer;font-family:var(--font);font-size:13.5px;
+  font-weight:500;color:var(--muted);padding:6px 14px;border-radius:8px;transition:all .2s;letter-spacing:.3px;}
+.nav-btn:hover{color:var(--text);background:rgba(255,255,255,0.05)}
+.nav-btn.active{color:var(--cyan);background:var(--cyan-dim)}
+.topbar-right{display:flex;align-items:center;gap:12px;margin-left:auto}
+.ws-pill{display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:20px;
+  font-size:11.5px;font-weight:500;font-family:var(--mono);
+  background:var(--surface);border:1px solid var(--border2);color:var(--muted);transition:all .3s;}
+.ws-pill.connected{color:var(--green);border-color:rgba(52,211,153,0.3)}
+.ws-dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+.notif-btn{position:relative;background:var(--surface);border:1px solid var(--border);
+  border-radius:8px;width:36px;height:36px;cursor:pointer;color:var(--muted);
+  display:flex;align-items:center;justify-content:center;transition:all .2s;font-size:16px;}
+.notif-btn:hover{color:var(--cyan)}
+.notif-badge{position:absolute;top:-5px;right:-5px;background:var(--red);color:#fff;
+  border-radius:10px;font-size:10px;font-weight:700;padding:1px 5px;
+  min-width:17px;text-align:center;display:none;font-family:var(--mono);}
+.notif-badge.show{display:block}
+
+/* ── Pages ── */
+.page{display:none !important;flex:1;padding:28px;flex-direction:column;gap:24px}
+.page.active{display:flex !important}
+
+/* ── Stats ── */
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.stat-card{background:var(--card);border:1px solid var(--border2);border-radius:14px;
+  padding:20px 22px;display:flex;flex-direction:column;gap:6px;position:relative;overflow:hidden;transition:border-color .3s;}
+.stat-card:hover{border-color:var(--border)}
+.stat-card::before{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,transparent,var(--accent,var(--cyan)),transparent);opacity:0.5;}
+.stat-card.c1{--accent:var(--cyan)}.stat-card.c2{--accent:var(--green)}
+.stat-card.c3{--accent:var(--amber)}.stat-card.c4{--accent:var(--violet)}
+.stat-label{font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:var(--muted)}
+.stat-val{font-size:32px;font-weight:700;color:var(--text);font-family:var(--mono);line-height:1}
+.stat-sub{font-size:12px;color:var(--muted);margin-top:2px}
+.stat-icon{position:absolute;right:18px;top:18px;font-size:22px;opacity:0.25}
+
+/* ── Section Header ── */
+.section-header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.section-title{font-size:15px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:8px}
+.section-title .count{background:var(--cyan-dim);border:1px solid var(--border);color:var(--cyan);
+  border-radius:20px;padding:1px 8px;font-size:11px;font-family:var(--mono);}
+
+/* ── Buttons ── */
+.btn{display:inline-flex;align-items:center;gap:7px;padding:7px 16px;border-radius:8px;
+  font-family:var(--font);font-size:13px;font-weight:500;cursor:pointer;border:none;transition:all .2s;text-decoration:none;}
+.btn-primary{background:var(--cyan);color:#03070f;font-weight:600}
+.btn-primary:hover{background:#7dd3fc;transform:translateY(-1px);box-shadow:0 4px 20px rgba(56,189,248,0.3)}
+.btn-ghost{background:none;border:1px solid var(--border);color:var(--muted)}
+.btn-ghost:hover{border-color:var(--border);color:var(--text);background:rgba(255,255,255,0.04)}
+.btn-danger{background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.3);color:var(--red)}
+.btn-danger:hover{background:rgba(248,113,113,0.2)}
+.btn-icon{padding:6px 8px;font-size:15px;border-radius:6px}
+.btn-sm{padding:4px 10px;font-size:12px;border-radius:6px}
+
+/* ── Table ── */
+.table-wrap{background:var(--card);border:1px solid var(--border2);border-radius:14px;overflow:hidden}
+table{width:100%;border-collapse:collapse;table-layout:fixed}
+thead th{text-align:left;padding:13px 16px;font-size:11px;font-weight:600;
+  text-transform:uppercase;letter-spacing:.8px;color:var(--muted);
+  border-bottom:1px solid var(--border2);background:rgba(0,0,0,0.2);}
+tbody tr{border-bottom:1px solid var(--border2);transition:background .15s}
+tbody tr:last-child{border-bottom:none}
+tbody tr:hover{background:rgba(56,189,248,0.03)}
+td{padding:12px 16px;font-size:13px;vertical-align:top}
+/* URL cell: wraps, never overflows */
+.url-cell{
+  font-family:var(--mono);font-size:11px;color:var(--cyan);
+  word-break:break-all;white-space:normal;overflow-wrap:anywhere;
+  display:block;line-height:1.5;
+}
+.url-cell:hover{text-decoration:underline}
+.actions-cell{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.name-cell{font-weight:600;font-size:13.5px}
+
+/* ── Badges ── */
+.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:20px;font-size:11.5px;font-weight:600;}
+.badge-dot{width:5px;height:5px;border-radius:50%;background:currentColor;flex-shrink:0}
+.badge.active{background:rgba(52,211,153,0.1);color:var(--green);border:1px solid rgba(52,211,153,0.3)}
+.badge.paused{background:rgba(251,191,36,0.1);color:var(--amber);border:1px solid rgba(251,191,36,0.3)}
+.badge.error{background:rgba(248,113,113,0.1);color:var(--red);border:1px solid rgba(248,113,113,0.3)}
+.badge.change{background:rgba(56,189,248,0.1);color:var(--cyan);border:1px solid rgba(56,189,248,0.3)}
+.badge.active .badge-dot{animation:blink 1.5s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
+
+/* ── Empty ── */
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:60px 20px;gap:14px;color:var(--muted);text-align:center;}
+.empty-icon{font-size:44px;opacity:0.3}
+.empty-title{font-size:15px;font-weight:600;color:var(--text)}
+.empty-sub{font-size:13px;max-width:300px;line-height:1.6}
+
+/* ── Change Cards ── */
+.change-item{background:var(--card);border:1px solid var(--border2);border-radius:12px;
+  padding:18px 20px;margin-bottom:10px;transition:border-color .2s;}
+.change-item:hover{border-color:var(--border)}
+.change-meta{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.change-site{font-weight:600;font-size:14px;color:var(--text)}
+.change-time{font-size:11.5px;color:var(--muted);font-family:var(--mono);margin-left:auto}
+.change-url{font-family:var(--mono);font-size:11px;color:var(--muted);word-break:break-all}
+.ai-summary-box{background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.2);
+  border-radius:8px;padding:12px 14px;margin-top:10px;font-size:13px;line-height:1.6;color:var(--text);}
+.ai-label{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:600;
+  text-transform:uppercase;letter-spacing:.8px;color:var(--violet);margin-bottom:6px;display:block;}
+.ai-error-box{background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.2);
+  border-radius:8px;padding:12px 14px;margin-top:10px;font-size:12.5px;line-height:1.6;color:var(--red);}
+.view-diff-btn{display:inline-flex;align-items:center;gap:5px;margin-top:10px;
+  font-size:12px;color:var(--cyan);cursor:pointer;
+  background:var(--cyan-dim);border:1px solid var(--border);border-radius:6px;
+  padding:5px 12px;font-family:var(--font);transition:all .2s;}
+.view-diff-btn:hover{background:rgba(56,189,248,0.2)}
+
+/* ── Notifications ── */
+.notif-item{display:flex;align-items:flex-start;gap:12px;padding:14px 16px;
+  border-bottom:1px solid var(--border2);transition:background .15s;cursor:pointer;}
+.notif-item:hover{background:rgba(255,255,255,0.02)}
+.notif-item.unread{background:rgba(56,189,248,0.03)}
+.notif-dot{width:8px;height:8px;border-radius:50%;background:var(--cyan);flex-shrink:0;margin-top:5px}
+.notif-item:not(.unread) .notif-dot{background:var(--muted2)}
+.notif-content{flex:1;min-width:0}
+.notif-msg{font-size:13.5px;color:var(--text);line-height:1.4}
+.notif-t{font-size:11.5px;color:var(--muted);font-family:var(--mono);margin-top:3px}
+
+/* ── Modal ── */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(4px);
+  z-index:9999;display:none;align-items:center;justify-content:center;padding:20px;}
+.overlay.show{display:flex}
+.modal{background:var(--card);border:1px solid var(--border);border-radius:18px;
+  width:100%;max-width:540px;max-height:90vh;overflow-y:auto;animation:modal-in .25s ease-out;}
+.modal-wide{max-width:820px}
+@keyframes modal-in{from{opacity:0;transform:scale(.95) translateY(10px)}to{opacity:1;transform:none}}
+.modal-head{display:flex;align-items:center;justify-content:space-between;
+  padding:20px 24px;border-bottom:1px solid var(--border2);}
+.modal-title{font-size:16px;font-weight:700}
+.modal-close{background:none;border:none;cursor:pointer;color:var(--muted);font-size:22px;
+  line-height:1;padding:4px;border-radius:6px;transition:color .2s;}
+.modal-close:hover{color:var(--text)}
+.modal-body{padding:24px}
+.modal-footer{padding:16px 24px;border-top:1px solid var(--border2);display:flex;justify-content:flex-end;gap:10px}
+
+/* ── Forms ── */
+.form-group{margin-bottom:18px}
+label{display:block;font-size:12px;font-weight:600;text-transform:uppercase;
+  letter-spacing:.6px;color:var(--muted);margin-bottom:7px}
+input,select,textarea{width:100%;background:var(--surface);border:1px solid var(--border);
+  border-radius:8px;color:var(--text);font-family:var(--font);font-size:14px;
+  padding:10px 13px;transition:border-color .2s;outline:none;}
+input:focus,select:focus,textarea:focus{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(56,189,248,0.1)}
+input::placeholder,textarea::placeholder{color:var(--muted2)}
+.form-hint{font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.5}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+select option{background:var(--surface)}
+
+/* ── Diff ── */
+.diff-wrap{background:#020917;border:1px solid var(--border2);border-radius:10px;
+  overflow:auto;max-height:440px;font-family:var(--mono);font-size:12px;}
+.diff-line{padding:2px 16px;white-space:pre-wrap;word-break:break-all;line-height:1.6}
+.diff-line.add{background:rgba(52,211,153,0.08);color:#86efac}
+.diff-line.del{background:rgba(248,113,113,0.08);color:#fca5a5}
+.diff-line.info{color:var(--muted);font-style:italic}
+.diff-line.ctx{color:#475569}
+.diff-empty{padding:30px;text-align:center;color:var(--muted);font-style:italic}
+
+/* ── Settings ── */
+.settings-card{background:var(--card);border:1px solid var(--border2);border-radius:14px;padding:24px;max-width:540px;}
+.settings-title{font-size:15px;font-weight:600;margin-bottom:18px;display:flex;align-items:center;gap:8px}
+
+/* ── Toast ── */
+#toasts{position:fixed;bottom:24px;right:24px;z-index:99999;display:flex;flex-direction:column-reverse;gap:10px}
+.toast{background:var(--card);border:1px solid var(--border);border-radius:12px;
+  padding:13px 18px;min-width:280px;max-width:360px;
+  display:flex;align-items:flex-start;gap:12px;
+  animation:toast-in .3s ease-out;box-shadow:0 8px 32px rgba(0,0,0,0.4);}
+.toast.removing{animation:toast-out .3s ease-in forwards}
+@keyframes toast-in{from{opacity:0;transform:translateX(30px)}to{opacity:1;transform:none}}
+@keyframes toast-out{to{opacity:0;transform:translateX(30px)}}
+.toast-icon{font-size:18px;flex-shrink:0;margin-top:1px}
+.toast-body{flex:1;min-width:0}
+.toast-title{font-size:13.5px;font-weight:600;color:var(--text)}
+.toast-msg{font-size:12px;color:var(--muted);margin-top:2px;line-height:1.4}
+
+/* ── Misc ── */
+.spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--cyan);
+  border-radius:50%;animation:spin .6s linear infinite;display:inline-block;flex-shrink:0;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.time-chip{font-size:11.5px;color:var(--muted);font-family:var(--mono)}
+
+@media(max-width:900px){.stats-row{grid-template-columns:repeat(2,1fr)}.form-row{grid-template-columns:1fr}}
+@media(max-width:600px){.stats-row{grid-template-columns:1fr 1fr}.topbar{padding:0 16px}.page{padding:16px}.nav-btn{padding:6px 10px;font-size:12.5px}}
+</style>
+</head>
+<body>
+<div class="shell">
+
+<!-- Topbar -->
+<header class="topbar">
+  <a class="logo" href="#"><div class="logo-pulse"></div>WEBWATCH</a>
+  <nav class="nav">
+    <button class="nav-btn active" onclick="showPage('dashboard',this)">Dashboard</button>
+    <button class="nav-btn" onclick="showPage('trackers',this)">Trackers</button>
+    <button class="nav-btn" onclick="showPage('changes',this)">Changes</button>
+    <button class="nav-btn" onclick="showPage('notifications',this)">Notifications</button>
+    <button class="nav-btn" onclick="showPage('settings',this)">Settings</button>
+  </nav>
+  <div class="topbar-right">
+    <div class="ws-pill" id="wsPill"><div class="ws-dot"></div><span id="wsLabel">connecting</span></div>
+    <button class="notif-btn" onclick="showPage('notifications',document.querySelectorAll('.nav-btn')[3])">
+      🔔<span class="notif-badge" id="notifBadge">0</span>
+    </button>
+  </div>
+</header>
+
+<!-- Dashboard -->
+<main class="page active" id="page-dashboard">
+  <div class="stats-row">
+    <div class="stat-card c1"><div class="stat-icon">🔍</div><div class="stat-label">Total Trackers</div><div class="stat-val" id="s-total">—</div><div class="stat-sub">monitored sites</div></div>
+    <div class="stat-card c2"><div class="stat-icon">✅</div><div class="stat-label">Active</div><div class="stat-val" id="s-active">—</div><div class="stat-sub">currently watching</div></div>
+    <div class="stat-card c3"><div class="stat-icon">⚡</div><div class="stat-label">Changes Today</div><div class="stat-val" id="s-changes">—</div><div class="stat-sub">detected today</div></div>
+    <div class="stat-card c4"><div class="stat-icon">🧠</div><div class="stat-label">Total Changes</div><div class="stat-val" id="s-total-changes">—</div><div class="stat-sub">all time</div></div>
+  </div>
+  <div>
+    <div class="section-header" style="margin-bottom:14px">
+      <div class="section-title">Recent Changes <span class="count" id="dash-changes-count">0</span></div>
+    </div>
+    <div id="dash-changes-list">
+      <div class="empty"><div class="spinner"></div><div class="empty-sub">Loading…</div></div>
+    </div>
+  </div>
+</main>
+
+<!-- Trackers -->
+<main class="page" id="page-trackers">
+  <div class="section-header">
+    <div class="section-title">Monitored Sites <span class="count" id="trackers-count">0</span></div>
+    <button class="btn btn-primary" onclick="openAddModal()">＋ Add Tracker</button>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <colgroup>
+        <col style="width:140px">
+        <col style="width:200px">
+        <col style="width:95px">
+        <col style="width:80px">
+        <col style="width:110px">
+        <col style="width:75px">
+        <col>
+      </colgroup>
+      <thead><tr>
+        <th>Name</th><th>URL</th><th>Status</th><th>Interval</th>
+        <th>Last Checked</th><th>Changes</th><th>Actions</th>
+      </tr></thead>
+      <tbody id="trackers-tbody">
+        <tr><td colspan="7"><div class="empty"><div class="spinner"></div></div></td></tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+<!-- Changes -->
+<main class="page" id="page-changes">
+  <div class="section-header" style="margin-bottom:14px">
+    <div class="section-title">Change History <span class="count" id="changes-count">0</span></div>
+  </div>
+  <div id="changes-list">
+    <div class="empty"><div class="spinner"></div><div class="empty-sub">Loading…</div></div>
+  </div>
+</main>
+
+<!-- Notifications -->
+<main class="page" id="page-notifications">
+  <div class="section-header" style="margin-bottom:14px">
+    <div class="section-title">Notifications <span class="count" id="notifs-count">0</span></div>
+    <button class="btn btn-ghost btn-sm" onclick="markAllRead()">Mark all read</button>
+  </div>
+  <div class="table-wrap">
+    <div id="notifs-list"><div class="empty"><div class="spinner"></div><div class="empty-sub">Loading…</div></div></div>
+  </div>
+</main>
+
+<!-- Settings -->
+<main class="page" id="page-settings">
+  <div class="settings-card">
+    <div class="settings-title">🧠 AI Settings</div>
+    <div class="form-group">
+      <label>Gemini API Key</label>
+      <input type="password" id="apiKeyInput" placeholder="x-goog-..." autocomplete="off">
+      <div class="form-hint">Paste your Google AI Studio API key here to enable AI summaries. Get one at <strong>aistudio.google.com</strong>.</div>
+    </div>
+    <div id="ai-status" style="margin-bottom:16px;font-size:13px;color:var(--muted)"></div>
+    <button class="btn btn-primary" onclick="saveApiKey()">Save API Key</button>
+  </div>
+  <div class="settings-card">
+    <div class="settings-title">ℹ️ About WebWatch</div>
+    <p style="font-size:13.5px;line-height:1.7;color:var(--muted)">
+      WebWatch monitors websites for changes and alerts you in real-time via WebSocket. It uses Gemini AI to summarize exactly what changed.
+    </p>
+    <div style="margin-top:14px;font-size:12px;font-family:var(--mono);color:var(--muted2)">
+      Backend: FastAPI + SQLite &nbsp;|&nbsp; AI: Gemini 3.5 Flash (Google)
+    </div>
+  </div>
+
+  <div class="settings-card" style="margin-top:16px">
+    <div class="settings-title">🔧 Fix Old Summaries</div> 
+  <p style="font-size:13.5px;line-height:1.7;color:var(--muted);margin-bottom:16px">
+    Re-run AI summaries on any old changes that failed or show errors.
+  </p>
+  <button class="btn btn-primary" id="regenBtn" onclick="regenerateSummaries()">
+    ↺ Regenerate Error Summaries
+  </button>
+  <div id="regenStatus" style="margin-top:12px;font-size:13px;color:var(--muted)"></div>
+</div>
+<div id="regenStatus" style="margin-top:12px;font-size:13px;color:var(--muted)"></div>
+  </div>
+
+</main>
+
+</div><!-- .shell -->
+
+<!-- Add Tracker Modal -->
+<div class="overlay" id="addModal">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">Add New Tracker</div>
+      <button class="modal-close" onclick="closeModal('addModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Name</label>
+        <input type="text" id="f-name" placeholder="e.g. Apple Store, Amazon Product…">
+      </div>
+      <div class="form-group">
+        <label>URL to Monitor</label>
+        <input type="url" id="f-url" placeholder="https://example.com/page">
+      </div>
+      <div class="form-row">
+        <div class="form-group" style="margin:0">
+          <label>Check Every</label>
+          <select id="f-interval">
+            <option value="5">5 minutes</option>
+            <option value="15">15 minutes</option>
+            <option value="30">30 minutes</option>
+            <option value="60" selected>1 hour</option>
+            <option value="180">3 hours</option>
+            <option value="360">6 hours</option>
+            <option value="720">12 hours</option>
+            <option value="1440">24 hours</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0">
+          <label>CSS Selector <span style="font-weight:400;text-transform:none;font-size:11px">(optional)</span></label>
+          <input type="text" id="f-selector" placeholder=".price, #content, main">
+        </div>
+      </div>
+      <div class="form-hint">💡 A CSS selector watches only part of the page — great for prices or stock status.</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('addModal')">Cancel</button>
+      <button class="btn btn-primary" id="addBtn" onclick="submitAddTracker()">Start Monitoring</button>
+    </div>
+  </div>
+</div>
+
+<!-- History Modal -->
+<div class="overlay" id="historyModal">
+  <div class="modal modal-wide">
+    <div class="modal-head">
+      <div class="modal-title" id="historyModalTitle">Change History</div>
+      <button class="modal-close" onclick="closeModal('historyModal')">✕</button>
+    </div>
+    <div class="modal-body" id="historyModalBody" style="min-height:200px"></div>
+  </div>
+</div>
+
+<!-- Diff Modal -->
+<div class="overlay" id="diffModal">
+  <div class="modal modal-wide">
+    <div class="modal-head">
+      <div class="modal-title">Diff Viewer</div>
+      <button class="modal-close" onclick="closeModal('diffModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="diffAiSummary" style="margin-bottom:16px"></div>
+      <div class="diff-wrap" id="diffContent"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Toasts -->
+<div id="toasts"></div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+const BASE = window.location.origin;
+let wsConn = null, wsRetries = 0;
+
+async function regenerateSummaries() {
+  const btn = document.getElementById('regenBtn');
+  const status = document.getElementById('regenStatus');
+  btn.textContent = '↺ Running…'; btn.disabled = true;
+  status.textContent = 'Regenerating summaries, this may take a moment…';
+  try {
+    const r = await api('POST', '/api/changes/regenerate-summaries');
+    status.innerHTML = `<span style="color:var(--green)">✅ Fixed ${r.fixed} of ${r.total} entries</span>`;
+    toast('Done!', `Regenerated ${r.fixed} AI summaries`, '🧠');
+  } catch(e) {
+    status.innerHTML = `<span style="color:var(--red)">❌ Error: ${esc(e.message)}</span>`;
+  } finally {
+    btn.textContent = '↺ Regenerate Error Summaries'; btn.disabled = false;
+  }
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+async function api(method, path, body) {
+  const opts = { method, headers: {'Content-Type':'application/json'} };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(BASE + path, opts);
+  if (!r.ok) { const e = await r.text(); throw new Error(e || r.statusText); }
+  return r.json();
+}
+
+function timeAgo(iso) {
+  if (!iso) return '—';
+  const d = (Date.now() - new Date(iso+'Z').getTime()) / 1000;
+  if (d < 60) return `${Math.floor(d)}s ago`;
+  if (d < 3600) return `${Math.floor(d/60)}m ago`;
+  if (d < 86400) return `${Math.floor(d/3600)}h ago`;
+  return `${Math.floor(d/86400)}d ago`;
+}
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso+'Z').toLocaleString();
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function intervalLabel(m) {
+  m = parseInt(m);
+  if (m < 60) return `${m}m`;
+  if (m < 1440) return `${m/60}h`;
+  return `${m/1440}d`;
+}
+
+// ── Toast ──────────────────────────────────────────────────────────────────
+function toast(title, msg, icon='🔔') {
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.innerHTML = `<div class="toast-icon">${icon}</div><div class="toast-body"><div class="toast-title">${esc(title)}</div><div class="toast-msg">${esc(msg)}</div></div>`;
+  document.getElementById('toasts').prepend(el);
+  setTimeout(() => { el.classList.add('removing'); setTimeout(() => el.remove(), 300); }, 5000);
+}
+
+// ── Navigation ─────────────────────────────────────────────────────────────
+function showPage(id, btn) {
+  // Hide all pages
+  document.querySelectorAll('.page').forEach(p => {
+    p.classList.remove('active');
+  });
+  // Deactivate all nav buttons
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  // Show target page
+  const page = document.getElementById('page-' + id);
+  if (page) page.classList.add('active');
+  // Highlight nav button
+  if (btn) btn.classList.add('active');
+
+  // Load data for page
+  if (id === 'dashboard') loadDashboard();
+  else if (id === 'trackers') loadTrackers();
+  else if (id === 'changes') loadChanges();
+  else if (id === 'notifications') loadNotifications();
+  else if (id === 'settings') loadSettings();
+}
+
+// ── WebSocket ──────────────────────────────────────────────────────────────
+function connectWS() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${proto}://${location.host}/ws`);
+  wsConn = ws;
+  ws.onopen = () => {
+    wsRetries = 0;
+    document.getElementById('wsPill').classList.add('connected');
+    document.getElementById('wsLabel').textContent = 'live';
+  };
+  ws.onmessage = e => {
+    try { handleWsMsg(JSON.parse(e.data)); } catch {}
+  };
+  ws.onclose = () => {
+    document.getElementById('wsPill').classList.remove('connected');
+    document.getElementById('wsLabel').textContent = 'reconnecting';
+    wsRetries++;
+    setTimeout(connectWS, Math.min(2000 * wsRetries, 30000));
+  };
+}
+
+function handleWsMsg(msg) {
+  if (msg.type === 'change_detected') {
+    toast(`Change on ${msg.tracker_name}`, msg.summary || 'Content changed', '⚡');
+    loadStats();
+    const active = document.querySelector('.page.active')?.id;
+    if (active === 'page-dashboard') loadDashboard();
+    if (active === 'page-changes') loadChanges();
+    if (active === 'page-trackers') loadTrackers();
+    if (active === 'page-notifications') loadNotifications();
+  }
+  if (msg.type === 'tracker_checked') {
+    loadStats();
+    if (document.querySelector('.page.active')?.id === 'page-trackers') loadTrackers();
+  }
+  if (msg.type === 'check_error') {
+    toast(`Error: ${msg.tracker_name}`, msg.error, '❌');
+    loadTrackers();
+  }
+}
+
+// ── Stats ──────────────────────────────────────────────────────────────────
+async function loadStats() {
+  try {
+    const s = await api('GET', '/api/stats');
+    document.getElementById('s-total').textContent = s.total_trackers;
+    document.getElementById('s-active').textContent = s.active_trackers;
+    document.getElementById('s-changes').textContent = s.changes_today;
+    document.getElementById('s-total-changes').textContent = s.total_changes;
+    const badge = document.getElementById('notifBadge');
+    if (s.unread_notifications > 0) {
+      badge.textContent = s.unread_notifications > 99 ? '99+' : s.unread_notifications;
+      badge.classList.add('show');
+    } else {
+      badge.classList.remove('show');
+    }
+  } catch(e) { console.error('Stats error:', e); }
+}
+
+// ── Dashboard ──────────────────────────────────────────────────────────────
+async function loadDashboard() {
+  await loadStats();
+  try {
+    const changes = await api('GET', '/api/changes?limit=10');
+    document.getElementById('dash-changes-count').textContent = changes.length;
+    const el = document.getElementById('dash-changes-list');
+    if (!changes.length) {
+      el.innerHTML = `<div class="empty"><div class="empty-icon">✨</div><div class="empty-title">No changes detected yet</div><div class="empty-sub">WebWatch will notify you when monitored pages change.</div></div>`;
+    } else {
+      el.innerHTML = changes.map(c => changeCard(c)).join('');
+    }
+  } catch(e) {
+    document.getElementById('dash-changes-list').innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">Error loading changes</div><div class="empty-sub">${esc(e.message)}</div></div>`;
+  }
+}
+
+function changeCard(c) {
+  const isErr = c.ai_summary && c.ai_summary.startsWith('AI unavailable');
+  const summaryHtml = c.ai_summary
+    ? (isErr
+        ? `<div class="ai-error-box"><span class="ai-label">⚠️ AI Error</span>${esc(c.ai_summary)}</div>`
+        : `<div class="ai-summary-box"><span class="ai-label">🧠 AI Summary</span>${esc(c.ai_summary)}</div>`)
+    : `<div class="ai-summary-box" style="color:var(--muted)"><span class="ai-label">🧠 AI Summary</span>No API key set — add one in Settings to enable AI summaries.</div>`;
+  return `<div class="change-item">
+    <div class="change-meta">
+      <span class="badge change"><span class="badge-dot"></span>change</span>
+      <span class="change-site">${esc(c.tracker_name)}</span>
+      <span class="change-time">${timeAgo(c.detected_at)}</span>
+    </div>
+    <div class="change-url">${esc(c.tracker_url || c.url || '')}</div>
+    ${summaryHtml}
+    <button class="view-diff-btn" onclick="openDiffModal(${c.id})">⟨/⟩ View diff</button>
+  </div>`;
+}
+
+// ── Trackers ───────────────────────────────────────────────────────────────
+async function loadTrackers() {
+  const tbody = document.getElementById('trackers-tbody');
+  tbody.innerHTML = `<tr><td colspan="7"><div class="empty"><div class="spinner"></div></div></td></tr>`;
+  try {
+    const trackers = await api('GET', '/api/trackers');
+    document.getElementById('trackers-count').textContent = trackers.length;
+    if (!trackers.length) {
+      tbody.innerHTML = `<tr><td colspan="7"><div class="empty"><div class="empty-icon">🔍</div><div class="empty-title">No trackers yet</div><div class="empty-sub">Add your first tracker to start monitoring.</div></div></td></tr>`;
+      return;
+    }
+    tbody.innerHTML = trackers.map(t => `
+      <tr>
+        <td><div class="name-cell">${esc(t.name)}</div></td>
+        <td><a href="${esc(t.url)}" target="_blank" rel="noopener" class="url-cell">${esc(t.url)}</a></td>
+        <td><span class="badge ${t.status}"><span class="badge-dot"></span>${t.status}</span></td>
+        <td><span class="time-chip">${intervalLabel(t.check_interval)}</span></td>
+        <td><span class="time-chip">${timeAgo(t.last_checked)}</span></td>
+        <td><span style="font-family:var(--mono);font-size:13px">${t.change_count||0}</span></td>
+        <td>
+          <div class="actions-cell">
+            <button class="btn btn-ghost btn-icon btn-sm" title="Check now" onclick="checkNow(${t.id})">↺</button>
+            <button class="btn btn-ghost btn-sm" onclick="openHistoryModal(${t.id},'${esc(t.name)}')">History</button>
+            ${t.status==='paused'
+              ? `<button class="btn btn-ghost btn-sm" onclick="togglePause(${t.id},'active')">Resume</button>`
+              : `<button class="btn btn-ghost btn-sm" onclick="togglePause(${t.id},'paused')">Pause</button>`}
+            <button class="btn btn-danger btn-icon btn-sm" title="Delete" onclick="deleteTracker(${t.id})">✕</button>
+          </div>
+        </td>
+      </tr>`).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--red);padding:20px">Error: ${esc(e.message)}</td></tr>`;
+  }
+}
+
+async function checkNow(id) {
+  try { await api('POST',`/api/trackers/${id}/check`); toast('Check queued','Checking now…','↺'); setTimeout(loadTrackers,3000); }
+  catch(e) { toast('Error',e.message,'❌'); }
+}
+
+async function togglePause(id, newStatus) {
+  try { await api('PUT',`/api/trackers/${id}`,{status:newStatus}); loadTrackers(); }
+  catch(e) { toast('Error',e.message,'❌'); }
+}
+
+async function deleteTracker(id) {
+  if (!confirm('Delete this tracker? All history will be removed.')) return;
+  try { await api('DELETE',`/api/trackers/${id}`); toast('Deleted','Tracker removed','🗑️'); loadTrackers(); loadStats(); }
+  catch(e) { toast('Error',e.message,'❌'); }
+}
+
+// ── Add Tracker ────────────────────────────────────────────────────────────
+function openAddModal() {
+  ['f-name','f-url','f-selector'].forEach(id => document.getElementById(id).value='');
+  document.getElementById('f-interval').value='60';
+  openModal('addModal');
+}
+
+async function submitAddTracker() {
+  const name = document.getElementById('f-name').value.trim();
+  const url  = document.getElementById('f-url').value.trim();
+  const interval = parseInt(document.getElementById('f-interval').value);
+  const selector = document.getElementById('f-selector').value.trim();
+  if (!name) { toast('Missing','Enter a name','⚠️'); return; }
+  if (!url)  { toast('Missing','Enter a URL','⚠️'); return; }
+  if (!url.startsWith('http')) { toast('Invalid URL','Must start with http:// or https://','⚠️'); return; }
+  const btn = document.getElementById('addBtn');
+  btn.textContent='Adding…'; btn.disabled=true;
+  try {
+    await api('POST','/api/trackers',{name,url,check_interval:interval,selector:selector||null});
+    closeModal('addModal');
+    toast('Tracker added!',`Monitoring ${name}`,'✅');
+    loadTrackers(); loadStats();
+  } catch(e) { toast('Error',e.message,'❌'); }
+  finally { btn.textContent='Start Monitoring'; btn.disabled=false; }
+}
+
+// ── Changes ────────────────────────────────────────────────────────────────
+async function loadChanges() {
+  const el = document.getElementById('changes-list');
+  el.innerHTML = `<div class="empty"><div class="spinner"></div><div class="empty-sub">Loading…</div></div>`;
+  try {
+    const changes = await api('GET','/api/changes?limit=50');
+    document.getElementById('changes-count').textContent = changes.length;
+    if (!changes.length) {
+      el.innerHTML = `<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">No changes recorded</div><div class="empty-sub">Changes will appear here when WebWatch detects something new.</div></div>`;
+    } else {
+      el.innerHTML = changes.map(c => changeCard(c)).join('');
+    }
+  } catch(e) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">Error</div><div class="empty-sub">${esc(e.message)}</div></div>`;
+  }
+}
+
+// ── Diff Modal ─────────────────────────────────────────────────────────────
+async function openDiffModal(changeId) {
+  document.getElementById('diffAiSummary').innerHTML = '';
+  document.getElementById('diffContent').innerHTML = `<div class="diff-empty"><div class="spinner"></div></div>`;
+  openModal('diffModal');
+  try {
+    const data = await api('GET',`/api/changes/${changeId}/diff`);
+    if (data.ai_summary) {
+      const isErr = data.ai_summary.startsWith('AI unavailable');
+      document.getElementById('diffAiSummary').innerHTML = isErr
+        ? `<div class="ai-error-box"><span class="ai-label">⚠️ AI Error</span>${esc(data.ai_summary)}</div>`
+        : `<div class="ai-summary-box"><span class="ai-label">🧠 AI Summary</span>${esc(data.ai_summary)}</div>`;
+    }
+    if (data.diff) {
+      document.getElementById('diffContent').innerHTML = renderDiff(data.diff);
+    } else {
+      document.getElementById('diffContent').innerHTML = `<div class="diff-empty">No diff data available for this change.</div>`;
+    }
+  } catch(e) {
+    document.getElementById('diffContent').innerHTML = `<div class="diff-empty" style="color:var(--red)">Error loading diff: ${esc(e.message)}</div>`;
+  }
+}
+
+function renderDiff(diff) {
+  if (!diff) return '<div class="diff-empty">Empty diff</div>';
+  return diff.split('\n').map(line => {
+    if (line.startsWith('+++') || line.startsWith('---')) return `<div class="diff-line info">${esc(line)}</div>`;
+    if (line.startsWith('@@')) return `<div class="diff-line info">${esc(line)}</div>`;
+    if (line.startsWith('+')) return `<div class="diff-line add">${esc(line)}</div>`;
+    if (line.startsWith('-')) return `<div class="diff-line del">${esc(line)}</div>`;
+    return `<div class="diff-line ctx">${esc(line)}</div>`;
+  }).join('');
+}
+
+// ── History Modal ──────────────────────────────────────────────────────────
+async function openHistoryModal(trackerId, name) {
+  document.getElementById('historyModalTitle').textContent = `History — ${name}`;
+  document.getElementById('historyModalBody').innerHTML = `<div class="empty"><div class="spinner"></div></div>`;
+  openModal('historyModal');
+  try {
+    const hist = await api('GET',`/api/trackers/${trackerId}/history?limit=20`);
+    if (!hist.length) {
+      document.getElementById('historyModalBody').innerHTML = `<div class="empty"><div class="empty-icon">📂</div><div class="empty-title">No changes yet</div></div>`;
+      return;
+    }
+    document.getElementById('historyModalBody').innerHTML = hist.map(h => `
+      <div class="change-item" style="margin-bottom:10px">
+        <div class="change-meta"><span class="change-time" style="margin-left:0">${fmtDate(h.detected_at)}</span></div>
+        ${h.ai_summary ? `<div class="ai-summary-box"><span class="ai-label">🧠 AI Summary</span>${esc(h.ai_summary)}</div>` : ''}
+        <button class="view-diff-btn" onclick="closeModal('historyModal');openDiffModal(${h.id})">⟨/⟩ View diff</button>
+      </div>`).join('');
+  } catch(e) {
+    document.getElementById('historyModalBody').innerHTML = `<div style="color:var(--red);padding:20px">Error: ${esc(e.message)}</div>`;
+  }
+}
+
+// ── Notifications ──────────────────────────────────────────────────────────
+async function loadNotifications() {
+  const el = document.getElementById('notifs-list');
+  el.innerHTML = `<div class="empty"><div class="spinner"></div><div class="empty-sub">Loading…</div></div>`;
+  try {
+    const notifs = await api('GET','/api/notifications');
+    document.getElementById('notifs-count').textContent = notifs.length;
+    if (!notifs.length) {
+      el.innerHTML = `<div class="empty"><div class="empty-icon">🔕</div><div class="empty-title">No notifications</div><div class="empty-sub">You'll see alerts here when pages change.</div></div>`;
+      return;
+    }
+    el.innerHTML = notifs.map(n => `
+      <div class="notif-item ${n.read?'':'unread'}" onclick="markRead(${n.id},this)">
+        <div class="notif-dot"></div>
+        <div class="notif-content">
+          <div class="notif-msg">${esc(n.message)}</div>
+          <div class="notif-t">${fmtDate(n.created_at)}</div>
+        </div>
+      </div>`).join('');
+  } catch(e) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">Error</div><div class="empty-sub">${esc(e.message)}</div></div>`;
+  }
+}
+
+async function markRead(id, el) {
+  try { await api('POST',`/api/notifications/${id}/read`); el?.classList.remove('unread'); loadStats(); } catch {}
+}
+
+async function markAllRead() {
+  try { await api('POST','/api/notifications/read-all'); loadNotifications(); loadStats(); toast('Done','All marked as read','✅'); } catch {}
+}
+
+// ── Settings ───────────────────────────────────────────────────────────────
+async function loadSettings() {
+  try {
+    const s = await api('GET','/api/settings');
+    if (s.anthropic_api_key) document.getElementById('apiKeyInput').placeholder = s.anthropic_api_key;
+    document.getElementById('ai-status').innerHTML = s.ai_enabled
+      ? '<span style="color:var(--green)">✅ AI summaries are enabled</span>'
+      : '<span style="color:var(--amber)">⚠️ No API key set — AI summaries are disabled. Add your key above.</span>';
+  } catch {}
+}
+
+async function saveApiKey() {
+  const key = document.getElementById('apiKeyInput').value.trim();
+  if (!key) { toast('Missing','Enter an API key','⚠️'); return; }
+  try {
+    await api('POST','/api/settings/api-key',{api_key:key});
+    document.getElementById('apiKeyInput').value='';
+    toast('Saved!','AI summaries now enabled','🧠');
+    loadSettings();
+  } catch(e) { toast('Error',e.message,'❌'); }
+}
+
+// ── Modal helpers ──────────────────────────────────────────────────────────
+function openModal(id)  { document.getElementById(id).classList.add('show'); }
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+document.querySelectorAll('.overlay').forEach(o => {
+  o.addEventListener('click', e => { if (e.target === o) o.classList.remove('show'); });
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.querySelectorAll('.overlay.show').forEach(o => o.classList.remove('show'));
+});
+
+// ── Boot ───────────────────────────────────────────────────────────────────
+connectWS();
+loadDashboard();
+setInterval(loadStats, 15000);
+</script>
+</body>
+</html>
