@@ -1,4 +1,4 @@
-# 🔍 WebWatch — Website Monitoring & Alert System
+#  WebWatch — Website Monitoring & Alert System
 
 A beautiful, real-time website change monitoring tool with AI-powered summaries.
 
